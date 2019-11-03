@@ -1,5 +1,6 @@
 #include "network.h"
 #include "random.h"
+#include <vector>
 
 void Network::resize(const size_t &n, double inhib) {
     size_t old = size();
@@ -62,6 +63,47 @@ size_t Network::random_connect(const double &mean_deg, const double &mean_streng
     return num_links;
 }
 
+std::pair<size_t, double> Network::degree(const size_t &i) const
+{
+	
+	size_t connection = 0;
+	double intensity = 0;
+	std::vector<std::pair<size_t, double> > connections(neighbors(i));
+	
+    for(size_t i(0); i<connections.size(); ++i)
+    {
+            ++connection;
+            if( neurons[connections[i].first].is_inhibitory()){
+                  intensity += connections[i].second;
+            }else{
+                  intensity -= connections[i].second;
+			}
+    }
+		
+	return {connection, intensity};	
+	
+}
+
+std::vector<std::pair<size_t, double> > Network::neighbors(const size_t &i) const
+{	
+	std::vector<std::pair<size_t, double>>  connections;
+	size_t k(0);
+	linkmap::iterator it;
+		
+     do {
+		++it;		
+	}while(it->first.first != i and it != links.end());
+	
+	
+	while(it->first.first == i){
+	    connections.push_back({it->first.second, it->second});
+		++it;	
+	};
+		
+	return connections;		
+}
+
+
 std::vector<double> Network::potentials() const {
     std::vector<double> vals;
     for (size_t nn=0; nn<size(); nn++)
@@ -76,6 +118,34 @@ std::vector<double> Network::recoveries() const {
     return vals;
 }
 
+std::set<size_t> Network::step(const std::vector<double> &thal_input)
+{
+	std::set<size_t> firing_neurons;
+	
+	double tal = 0;
+	
+	for(size_t i(0); i < neurons.size(); ++i){
+		if(neurons[i].firing()){
+			firing_neurons.insert(i);
+			neurons[i].reset();
+		}
+	}
+	
+	for(size_t i(0); i < neurons.size(); ++i){
+		tal = thal_input[i];
+		if(neurons[i].is_inhibitory())
+		{
+			tal*=0.4;
+		}
+	  
+	    neurons[i].input(0.04*sqrt(degree(i).second)+ 5*(degree(i).second) +140 - neurons[i].recovery() + tal);
+	    neurons[i].step();    
+    }
+    
+    return firing_neurons;		
+}
+
+
 void Network::print_params(std::ostream *_out) {
     (*_out) << "Type\ta\tb\tc\td\tInhibitory\tdegree\tvalence" << std::endl;
     for (size_t nn=0; nn<size(); nn++) {
@@ -84,6 +154,7 @@ void Network::print_params(std::ostream *_out) {
                 << '\t' << dI.first << '\t' << dI.second
                 << std::endl;
     }
+
 }
 
 void Network::print_head(const std::map<std::string, size_t> &_nt, 
